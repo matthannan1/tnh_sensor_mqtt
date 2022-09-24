@@ -46,9 +46,15 @@ on schedule, at 9:05.
 
 I want to syslog the delivery notfication code, but that is a something for another day.
 I have enough going on rebuilding this Pi!
+---------------------------------------
+24 Sep 2022
+
+Removed sensitive info (username, pwd, etc) to secrets.py file in prep for uploading to GitHub,
+which is now a PiTA from Linux on ARM what with the new 2F authentication BS.
 
 """
 
+import secrets
 import time
 import json
 from datetime import datetime
@@ -64,9 +70,9 @@ I2C = busio.I2C(board.SCL, board.SDA)
 SENSOR = adafruit_sht31d.SHT31D(I2C)
 
 # MQTT stuff
-MQTT_BROKER = "10.25.68.56"
+MQTT_BROKER = secrets.broker_ip
 MQTT_CLIENT = mqtt.Client()
-MQTT_CLIENT.username_pw_set(username="mqttha", password="veronicalake")
+MQTT_CLIENT.username_pw_set(username=secrets.username, password=secrets.password)
 MQTT_CLIENT.connect(MQTT_BROKER)
 MQTT_CLIENT.loop_start()
 
