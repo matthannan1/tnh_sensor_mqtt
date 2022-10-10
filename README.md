@@ -1,2 +1,5 @@
 # tnh_sensor_mqtt
-SHT31D sensor data from Pi3B to Home Assistant via MQTT
+
+Temperature aNd Humidity
+
+SHT31D and PMS5003 sensor data from Raspberry Pi 3B+ to Home Assistant (or other MQTT Broker)
