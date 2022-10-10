@@ -51,6 +51,12 @@ I have enough going on rebuilding this Pi!
 
 Removed sensitive info (username, pwd, etc) to secrets.py file in prep for uploading to GitHub,
 which is now a PiTA from Linux on ARM what with the new 2F authentication BS.
+------------------------------------------
+08 Oct 2022
+
+Adding PMS5003 patriculate matter sensor using the pms5003 library.
+sudo crontab -e
+@reboot /usr/bin/python3 /home/pi/tnh-sensor-mqtt/tnh_sensor_mqtt.py >> ~/cron.log 2>&1
 
 """
 
@@ -60,14 +66,23 @@ import json
 from datetime import datetime
 import syslog
 import adafruit_sht31d
+from pms5003 import PMS5003
 import board
 import busio
 import paho.mqtt.client as mqtt
 
 
 # Sensor stuff
+# SHT31d
 I2C = busio.I2C(board.SCL, board.SDA)
 SENSOR = adafruit_sht31d.SHT31D(I2C)
+# PMS5003
+pms5003 = PMS5003(
+    device='/dev/ttyAMA0',
+    baudrate=9600,
+    pin_enable=22,
+    pin_reset=27
+)
 
 # MQTT stuff
 MQTT_BROKER = secrets.broker_ip
@@ -75,6 +90,10 @@ MQTT_CLIENT = mqtt.Client()
 MQTT_CLIENT.username_pw_set(username=secrets.username, password=secrets.password)
 MQTT_CLIENT.connect(MQTT_BROKER)
 MQTT_CLIENT.loop_start()
+
+# Let the PMS5003 settle out
+pms_data = pms5003.read()
+time. sleep(30)
 
 while True:
     # Gather data
@@ -86,7 +105,6 @@ while True:
     # These are the minutes at which the sensor is busy working
     # for Django and Grafana via CRON jobs
     AVOID_LIST = ["00", "01", "30", "31"]
-
     if current_minute in AVOID_LIST:
         time.sleep(60)
         continue
@@ -95,22 +113,49 @@ while True:
         temp = round((SENSOR.temperature * 1.8 + 32), 1)
         ## humidity reading is rounded to two decimal places
         humid = round(SENSOR.relative_humidity, 2)
+        # Read PMS5003
+        pms_data = pms5003.read()
+        # print(pms_data.pm_per_1l_air(0.3))
+        # These need to be set to variables otherwise msgs send zeros
+        con_PM1 = pms_data.pm_ug_per_m3(1.0)
+        con_PM2dot5 = pms_data.pm_ug_per_m3(2.5)
+        con_PM10 = pms_data.pm_ug_per_m3(10)
+        decaliter_dot3 = pms_data.pm_per_1l_air(0.3)
+        decaliter_dot5 = pms_data.pm_per_1l_air(0.5)
+        decaliter_1 = pms_data.pm_per_1l_air(1.0)
+        decaliter_2dot5 = pms_data.pm_per_1l_air(2.5)
+        decaliter_5 = pms_data.pm_per_1l_air(5)
+        decaliter_10 = pms_data.pm_per_1l_air(10)
 
         # Publish Data
-        # Next two lines for history...example of sending one piece of data
+        # Next two lines retained for for history...example of sending one piece of data
         # MQTT_CLIENT.publish("temperature, temp)
         # print("Just published", temp, "to topic BASEMENT_TEMPERATURE")
 
         # Bundle data into json format
-        msgs = json.dumps({"temperature": temp, "humidity": humid})
+        msgs = json.dumps({"temperature": temp,
+                           "humidity": humid,
+                           "pm_ug_per_m3_1": con_PM1,
+                           "pm_ug_per_m3_2dot5": con_PM2dot5,
+                           "pm_ug_per_m3_10": con_PM10,
+                           "pm_per_1l_air_dot3": decaliter_dot3,
+                           "pm_per_1l_air_dot5": decaliter_dot5,
+                           "pm_per_1l_air_1": decaliter_1,
+                           "pm_per_1l_air_2dot5": decaliter_2dot5,
+                           "pm_per_1l_air_5": decaliter_5,
+                           "pm_per_1l_air_10": decaliter_10
+                          })
+
+        # print(msgs)
 
         # Send it! QoS = 0, Pesistence = True
         MQTT_CLIENT.publish("18willow/inside/basement", msgs, 0, True)
 
         # Tell the world
-        # print("Just published", temp,
-        #       "to topic 18willow/inside/basement/temperature at", current_time)
-        syslog.syslog('Just published temp & humidity of ', temp, humid)
+        syslog.syslog(syslog.LOG_INFO, str(msgs))
 
         # Gracefully disconnect
         MQTT_CLIENT.disconnect()
+
+        # Sleep 5 mins
+        time.sleep(300)
