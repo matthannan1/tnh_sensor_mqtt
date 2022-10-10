@@ -156,6 +156,3 @@ while True:
 
         # Gracefully disconnect
         MQTT_CLIENT.disconnect()
-
-        # Sleep 5 mins
-        time.sleep(300)
